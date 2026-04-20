@@ -1,1 +1,303 @@
-sdfhgsthsldofyjsdefjhdsnoftghsfeghgofdoihxdpijhopidfgjnhrdfgoghsetgjidufgthdfgihuo
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D Платформер</title>
+    <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css">
+    <script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: linear-gradient(180deg, #87CEEB 0%, #E0F6FF 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Press Start 2P', cursive;
+            overflow: hidden;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 24px;
+            text-shadow: 2px 2px 0 #fff;
+        }
+        #game-container {
+            border: 4px solid #4A3728;
+            border-radius: 4px;
+            box-shadow: 0 8px 0 #2A1F14, 0 12px 20px rgba(0,0,0,0.3);
+        }
+        #game {
+            display: block;
+            background: #5C94FC;
+        }
+        .controls {
+            margin-top: 20px;
+            color: #333;
+            font-size: 10px;
+            text-align: center;
+        }
+        .controls span {
+            display: inline-block;
+            background: #fff;
+            padding: 8px 16px;
+            border-radius: 4px;
+            margin: 4px;
+            border: 2px solid #333;
+        }
+        py-script {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>🏃 ПЛАТФОРМЕР</h1>
+    <div id="game-container">
+        <canvas id="game" width="800" height="500"></canvas>
+    </div>
+    <div class="controls">
+        <span>← → ДВИЖЕНИЕ</span>
+        <span>ПРОБЕЛ ПРЫЖОК</span>
+        <span>R РЕСТАРТ</span>
+    </div>
+
+    <py-script type="micropip">
+from pyodide.ffi import create_proxy
+from js import document, window, console
+import math
+
+canvas = document.getElementById("game")
+ctx = canvas.getContext("2d")
+
+GRAVITY = 0.6
+FRICTION = 0.85
+JUMP_FORCE = -14
+MOVE_SPEED = 0.8
+MAX_SPEED = 6
+
+class Player:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.width = 30
+        self.height = 40
+        self.vel_x = 0
+        self.vel_y = 0
+        self.on_ground = False
+        self.facing_right = True
+        self.ground_y = y
+        self.start_x = x
+        self.start_y = y
+
+    def reset(self):
+        self.x = self.start_x
+        self.y = self.start_y
+        self.vel_x = 0
+        self.vel_y = 0
+        self.on_ground = False
+
+class Platform:
+    def __init__(self, x, y, width, height, color="#4A3728"):
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        self.color = color
+
+class Coin:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.radius = 12
+        self.collected = False
+        self.anim_offset = 0
+
+player = Player(50, 350)
+
+platforms = [
+    Platform(0, 460, 800, 40),
+    Platform(150, 380, 120, 20),
+    Platform(350, 320, 120, 20),
+    Platform(550, 260, 100, 20),
+    Platform(300, 200, 80, 20),
+    Platform(100, 150, 100, 20),
+    Platform(650, 180, 100, 20),
+    Platform(480, 380, 80, 20),
+]
+
+coins = [
+    Coin(200, 350),
+    Coin(400, 290),
+    Coin(600, 230),
+    Coin(340, 170),
+    Coin(150, 120),
+    Coin(700, 150),
+    Coin(520, 350),
+]
+
+keys = {"left": False, "right": False, "jump": False}
+score = 0
+
+def on_key_down(event):
+    key = event.key.lower()
+    if key == "arrowleft":
+        keys["left"] = True
+    elif key == "arrowright":
+        keys["right"] = True
+    elif key == " ":
+        keys["jump"] = True
+    elif key == "r":
+        reset_game()
+
+def on_key_up(event):
+    key = event.key.lower()
+    if key == "arrowleft":
+        keys["left"] = False
+    elif key == "arrowright":
+        keys["right"] = False
+    elif key == " ":
+        keys["jump"] = False
+
+def reset_game():
+    global score
+    player.reset()
+    for coin in coins:
+        coin.collected = False
+    score = 0
+
+def check_collision(rect1, rect2):
+    return (rect1.x < rect2.x + rect2.width and
+            rect1.x + rect1.width > rect2.x and
+            rect1.y < rect2.y + rect2.height and
+            rect1.y + rect1.height > rect2.y)
+
+def update():
+    global score
+
+    if keys["left"]:
+        player.vel_x -= MOVE_SPEED
+        player.facing_right = False
+    if keys["right"]:
+        player.vel_x += MOVE_SPEED
+        player.facing_right = True
+
+    player.vel_x = max(-MAX_SPEED, min(MAX_SPEED, player.vel_x))
+    player.vel_x *= FRICTION
+    player.vel_y += GRAVITY
+
+    if keys["jump"] and player.on_ground:
+        player.vel_y = JUMP_FORCE
+        player.on_ground = False
+
+    player.x += player.vel_x
+    for platform in platforms:
+        if check_collision(player, platform):
+            if player.vel_x > 0:
+                player.x = platform.x - player.width
+            elif player.vel_x < 0:
+                player.x = platform.x + platform.width
+            player.vel_x = 0
+
+    player.y += player.vel_y
+    player.on_ground = False
+    for platform in platforms:
+        if check_collision(player, platform):
+            if player.vel_y > 0:
+                player.y = platform.y - player.height
+                player.vel_y = 0
+                player.on_ground = True
+            elif player.vel_y < 0:
+                player.y = platform.y + platform.height
+                player.vel_y = 0
+
+    player.x = max(0, min(canvas.width - player.width, player.x))
+
+    if player.y > canvas.height:
+        reset_game()
+
+    for coin in coins:
+        if not coin.collected:
+            coin_dist = math.sqrt((player.x + player.width/2 - coin.x)**2 + 
+                                (player.y + player.height/2 - coin.y)**2)
+            if coin_dist < coin.radius + 20:
+                coin.collected = True
+                score += 10
+
+def draw_player():
+    x = int(player.x)
+    y = int(player.y)
+    w = player.width
+    h = player.height
+
+    ctx.fillStyle = "#E52521"
+    ctx.fillRect(x + 4, y, w - 8, h - 12)
+
+    ctx.fillStyle = "#FFDAB9"
+    ctx.fillRect(x + 6, y + 2, 8, 8)
+    ctx.fillRect(x + w - 14, y + 2, 8, 8)
+
+    ctx.fillStyle = "#F5DEB3"
+    ctx.fillRect(x + 4, y + h - 12, w - 8, 12)
+
+    ctx.fillStyle = "#1E90FF"
+    if player.facing_right:
+        ctx.fillRect(x + 10, y + 8, 14, 10)
+    else:
+        ctx.fillRect(x + 6, y + 8, 14, 10)
+
+def draw():
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+    ctx.fillStyle = "#5C94FC"
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+    ctx.fillStyle = "#70C030"
+    ctx.fillRect(0, canvas.height - 40, canvas.width, 40)
+
+    for platform in platforms:
+        ctx.fillStyle = platform.color
+        ctx.fillRect(platform.x, platform.y, platform.width, platform.height)
+
+        ctx.fillStyle = "#5D4037"
+        ctx.fillRect(platform.x, platform.y + 4, platform.width, 4)
+
+    import time
+    current_time = time.time()
+
+    for coin in coins:
+        if not coin.collected:
+            bounce = math.sin(current_time * 4 + coin.x) * 3
+            ctx.fillStyle = "#FFD700"
+            ctx.beginPath()
+            ctx.arc(coin.x, coin.y + bounce, coin.radius, 0, 2 * math.pi)
+            ctx.fill()
+
+            ctx.fillStyle = "#FFF8DC"
+            ctx.beginPath()
+            ctx.arc(coin.x - 3, coin.y + bounce - 3, 4, 0, 2 * math.pi)
+            ctx.fill()
+
+    draw_player()
+
+    ctx.fillStyle = "#FFF"
+    ctx.font = "16px Press Start 2P, sans-serif"
+    ctx.fillText(f"СЧЁТ: {score}", 20, 30)
+
+def game_loop():
+    update()
+    draw()
+    window.requestAnimationFrame(create_proxy(game_loop))
+
+document.addEventListener("keydown", create_proxy(on_key_down))
+document.addEventListener("keyup", create_proxy(on_key_up))
+
+game_loop()
+    </py-script>
+</body>
+</html>
