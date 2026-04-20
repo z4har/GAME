@@ -38,7 +38,7 @@
             padding: 15px;
         }
         .panel {
-            margin-bottom: 20px;
+            margin-bottom: 15px;
         }
         .panel h3 {
             color: #ffd700;
@@ -72,20 +72,41 @@
             float: right;
             color: #ffd700;
         }
-        .stats {
+        .stat-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 15px;
+            background: #3d2817;
+            border: 2px solid #8b4513;
+            margin-bottom: 8px;
+            border-radius: 5px;
+        }
+        .stat-row .icon {
+            font-size: 24px;
+        }
+        .stat-row .label {
+            flex: 1;
+            margin-left: 10px;
             font-size: 14px;
-            line-height: 1.8;
         }
-        .stats span {
-            color: #ffd700;
-            float: right;
+        .stat-row .value {
+            font-size: 18px;
+            font-weight: bold;
+            min-width: 60px;
+            text-align: right;
         }
+        .stat-row.gold .value { color: #ffd700; }
+        .stat-row.hp .value { color: #ff4444; }
+        .stat-row.wave .value { color: #87ceeb; }
+        
         #wave-info {
             text-align: center;
             padding: 10px;
             background: #4a2a17;
             border: 2px solid #8b4513;
             margin-bottom: 10px;
+            border-radius: 5px;
         }
         #wave-info .wave-num {
             font-size: 24px;
@@ -94,15 +115,18 @@
         #start-btn {
             width: 100%;
             padding: 15px;
-            background: #2e8b2e;
-            border: 2px solid #3cb371;
+            background: linear-gradient(180deg, #3cb371 0%, #2e8b2e 100%);
+            border: 2px solid #228b22;
             color: #fff;
             font-size: 18px;
             cursor: pointer;
             font-family: Georgia, serif;
+            border-radius: 5px;
+            text-shadow: 1px 1px 2px #000;
         }
-        #start-btn:hover { background: #3cb371; }
+        #start-btn:hover { background: linear-gradient(180deg, #228b22 0%, #1a6b1a 100%); }
         #start-btn:disabled { background: #555; border-color: #666; cursor: not-allowed; }
+        
         #message {
             position: fixed;
             top: 50%;
@@ -114,9 +138,16 @@
             border: 4px solid #ffd700;
             display: none;
             z-index: 100;
+            border-radius: 10px;
         }
         #message.win { color: #00ff00; }
         #message.lose { color: #ff0000; }
+        
+        .tower-desc {
+            font-size: 10px;
+            color: #888;
+            margin-top: 2px;
+        }
     </style>
 </head>
 <body>
@@ -129,23 +160,36 @@
                 <div class="wave-num" id="wave-num">1 / 5</div>
             </div>
             <div class="panel">
-                <h3>ВЫБОР БАШНИ</h3>
+                <h3>🏗️ ВЫБОР БАШНИ</h3>
                 <button class="tower-btn" onclick="selectTower('crossbow')">
                     🏹 Арбалет<span class="cost">50</span>
+                    <div class="tower-desc">Быстрый, одна цель</div>
                 </button>
                 <button class="tower-btn" onclick="selectTower('catapult')">
-                    💣 Катапульта<span class="cost">80</span>
+                    💣 Катапульта<span class="cost">100</span>
+                    <div class="tower-desc">Медленный, сплеш</div>
                 </button>
                 <button class="tower-btn" onclick="selectTower('fortress')">
                     🏰 Замок<span class="cost">100</span>
+                    <div class="tower-desc">Выпускает рыцарей</div>
                 </button>
             </div>
             <div class="panel">
-                <h3>СТАТИСТИКА</h3>
-                <div class="stats">
-                    Золото: <span id="gold">150</span>
-                    Здоровье: <span id="hp">20</span>
-                    Волна: <span id="wave">1</span>
+                <h3>📊 СТАТИСТИКА</h3>
+                <div class="stat-row gold">
+                    <span class="icon">💰</span>
+                    <span class="label">Золото</span>
+                    <span class="value" id="gold">150</span>
+                </div>
+                <div class="stat-row hp">
+                    <span class="icon">❤️</span>
+                    <span class="label">Здоровье</span>
+                    <span class="value" id="hp">20</span>
+                </div>
+                <div class="stat-row wave">
+                    <span class="icon">🌊</span>
+                    <span class="label">Волна</span>
+                    <span class="value" id="wave">1</span>
                 </div>
             </div>
             <button id="start-btn" onclick="startWave()">НАЧАТЬ ВОЛНУ</button>
@@ -159,8 +203,8 @@
 
         const TOWER_TYPES = {
             crossbow: { name: "Арбалет", cost: 50, range: 150, damage: 25, fireRate: 60, color: "#8B4513", splash: false },
-            catapult: { name: "Катапульта", cost: 80, range: 200, damage: 40, fireRate: 120, color: "#696969", splash: true, splashRadius: 80 },
-            fortress: { name: "Замок", cost: 100, range: 80, damage: 15, fireRate: 30, color: "#4a2a17", splash: false, melee: true }
+            catapult: { name: "Катапульта", cost: 100, range: 200, damage: 40, fireRate: 360, color: "#696969", splash: true, splashRadius: 80 },
+            fortress: { name: "Замок", cost: 100, range: 100, damage: 15, fireRate: 30, color: "#4a2a17", spawnKnight: true, spawnInterval: 900 }
         };
 
         const path = [
@@ -186,6 +230,7 @@
         ];
 
         let orcs = [];
+        let knights = [];
         let towers = [];
         let projectiles = [];
         let gold = 150;
@@ -198,6 +243,7 @@
         let selectedTower = null;
         let gameOver = false;
         let gameWon = false;
+        let baseOrcHp = waves[0].hp;
 
         function updateUI() {
             document.getElementById("gold").textContent = gold;
@@ -216,6 +262,7 @@
         function startWave() {
             if (waveInProgress || wave > 5) return;
             currentWave = wave - 1;
+            baseOrcHp = waves[currentWave].hp;
             orcsToSpawn = waves[currentWave].count;
             waveInProgress = true;
             updateUI();
@@ -230,8 +277,21 @@
                 maxHp: w.hp,
                 speed: w.speed,
                 reward: w.reward,
-                pathIndex: 0,
-                frozen: 0
+                pathIndex: 0
+            });
+        }
+
+        function spawnKnight(tower) {
+            const knightHp = baseOrcHp * 3;
+            knights.push({
+                x: tower.x,
+                y: tower.y,
+                hp: knightHp,
+                maxHp: knightHp,
+                speed: 1.2,
+                damage: 30,
+                target: null,
+                tower: tower
             });
         }
 
@@ -247,6 +307,7 @@
                 type: selectedTower,
                 ...type,
                 cooldown: 0,
+                spawnTimer: 0,
                 angle: 0
             };
             towers.push(tower);
@@ -269,6 +330,20 @@
             return target;
         }
 
+        function findKnightTarget(knight) {
+            let target = null;
+            let minDist = 100;
+            
+            for (const orc of orcs) {
+                const dist = Math.hypot(orc.x - knight.x, orc.y - knight.y);
+                if (dist < minDist) {
+                    minDist = dist;
+                    target = orc;
+                }
+            }
+            return target;
+        }
+
         function update() {
             if (gameOver || gameWon) return;
 
@@ -281,8 +356,56 @@
                 }
             }
 
+            for (const tower of towers) {
+                if (tower.spawnKnight) {
+                    tower.spawnTimer++;
+                    if (tower.spawnTimer >= tower.spawnInterval) {
+                        spawnKnight(tower);
+                        tower.spawnTimer = 0;
+                    }
+                }
+            }
+
+            for (let i = knights.length - 1; i >= 0; i--) {
+                const knight = knights[i];
+                const target = findKnightTarget(knight);
+                
+                if (target) {
+                    const dist = Math.hypot(target.x - knight.x, target.y - knight.y);
+                    
+                    if (dist < 20) {
+                        const knightDamage = knight.hp;
+                        const orcDamage = target.hp;
+                        
+                        knight.hp -= orcDamage;
+                        target.hp -= knightDamage;
+                    } else {
+                        const dx = target.x - knight.x;
+                        const dy = target.y - knight.y;
+                        knight.x += (dx / dist) * knight.speed;
+                        knight.y += (dy / dist) * knight.speed;
+                    }
+                }
+                
+                if (knight.hp <= 0) {
+                    knights.splice(i, 1);
+                }
+            }
+
             for (let i = orcs.length - 1; i >= 0; i--) {
                 const orc = orcs[i];
+                
+                let blocked = false;
+                for (const knight of knights) {
+                    const dist = Math.hypot(orc.x - knight.x, orc.y - knight.y);
+                    if (dist < 20) {
+                        blocked = true;
+                        break;
+                    }
+                }
+                
+                if (blocked) continue;
+                
                 const target = path[orc.pathIndex + 1];
                 if (!target) {
                     hp--;
@@ -308,27 +431,25 @@
             }
 
             for (const tower of towers) {
+                if (tower.spawnKnight) continue;
+                
                 if (tower.cooldown > 0) tower.cooldown--;
                 
                 const target = findTarget(tower);
                 if (target && tower.cooldown <= 0) {
                     tower.angle = Math.atan2(target.y - tower.y, target.x - tower.x);
                     
-                    if (tower.melee) {
-                        target.hp -= tower.damage;
-                    } else {
-                        projectiles.push({
-                            x: tower.x,
-                            y: tower.y,
-                            targetX: target.x,
-                            targetY: target.y,
-                            damage: tower.damage,
-                            splash: tower.splash,
-                            splashRadius: tower.splashRadius || 0,
-                            speed: tower.splash ? 3 : 8,
-                            color: tower.type === "catapult" ? "#ff6600" : "#fff"
-                        });
-                    }
+                    projectiles.push({
+                        x: tower.x,
+                        y: tower.y,
+                        targetX: target.x,
+                        targetY: target.y,
+                        damage: tower.damage,
+                        splash: tower.splash,
+                        splashRadius: tower.splashRadius || 0,
+                        speed: tower.splash ? 3 : 8,
+                        color: tower.type === "catapult" ? "#ff6600" : "#fff"
+                    });
                     tower.cooldown = tower.fireRate;
                 }
             }
@@ -348,11 +469,9 @@
                         }
                         drawExplosion(proj.targetX, proj.targetY, proj.splashRadius);
                     } else {
-                        let hit = false;
                         for (const orc of orcs) {
                             if (Math.hypot(orc.x - proj.targetX, orc.y - proj.targetY) < 30) {
                                 orc.hp -= proj.damage;
-                                hit = true;
                                 break;
                             }
                         }
@@ -371,7 +490,7 @@
                 }
             }
 
-            if (waveInProgress && orcsToSpawn === 0 && orcs.length === 0) {
+            if (waveInProgress && orcsToSpawn === 0 && orcs.length === 0 && knights.length === 0) {
                 waveInProgress = false;
                 if (wave < 5) {
                     wave++;
@@ -391,6 +510,36 @@
             ctx.fill();
         }
 
+        function drawKnight(knight) {
+            ctx.fillStyle = "#C0C0C0";
+            ctx.beginPath();
+            ctx.arc(knight.x, knight.y - 5, 12, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.fillStyle = "#808080";
+            ctx.fillRect(knight.x - 15, knight.y - 5, 30, 20);
+            
+            ctx.fillStyle = "#FFD700";
+            ctx.beginPath();
+            ctx.moveTo(knight.x, knight.y - 25);
+            ctx.lineTo(knight.x - 5, knight.y - 35);
+            ctx.lineTo(knight.x + 5, knight.y - 35);
+            ctx.closePath();
+            ctx.fill();
+            
+            ctx.fillStyle = "#000";
+            ctx.beginPath();
+            ctx.arc(knight.x - 4, knight.y - 7, 2, 0, Math.PI * 2);
+            ctx.arc(knight.x + 4, knight.y - 7, 2, 0, Math.PI * 2);
+            ctx.fill();
+
+            const hpPercent = knight.hp / knight.maxHp;
+            ctx.fillStyle = "#333";
+            ctx.fillRect(knight.x - 15, knight.y - 30, 30, 5);
+            ctx.fillStyle = "#00ff00";
+            ctx.fillRect(knight.x - 15, knight.y - 30, 30 * hpPercent, 5);
+        }
+
         function draw() {
             ctx.fillStyle = "#3d2817";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -408,12 +557,15 @@
 
             ctx.fillStyle = "#2d1b0e";
             ctx.beginPath();
-            ctx.arc(path[path.length - 1].x, path[path.length - 1].y, 30, 0, Math.PI * 2);
+            ctx.arc(path[path.length - 1].x, path[path.length - 1].y, 35, 0, Math.PI * 2);
             ctx.fill();
+            ctx.strokeStyle = "#ffd700";
+            ctx.lineWidth = 3;
+            ctx.stroke();
             ctx.fillStyle = "#ffd700";
-            ctx.font = "20px Georgia";
+            ctx.font = "28px Georgia";
             ctx.textAlign = "center";
-            ctx.fillText("🏰", path[path.length - 1].x, path[path.length - 1].y + 7);
+            ctx.fillText("🏰", path[path.length - 1].x, path[path.length - 1].y + 10);
 
             for (const spot of towerSpots) {
                 ctx.fillStyle = spot.occupied ? "#4a2a17" : "#6a4a37";
@@ -433,7 +585,24 @@
 
             for (const tower of towers) {
                 ctx.fillStyle = tower.color;
-                ctx.fillRect(tower.x - 20, tower.y - 20, 40, 40);
+                
+                if (tower.type === "fortress") {
+                    ctx.fillRect(tower.x - 20, tower.y - 25, 40, 50);
+                    ctx.fillStyle = "#8B4513";
+                    ctx.fillRect(tower.x - 15, tower.y - 35, 30, 15);
+                    ctx.fillStyle = "#333";
+                    ctx.fillRect(tower.x - 8, tower.y - 10, 16, 25);
+                } else if (tower.type === "catapult") {
+                    ctx.beginPath();
+                    ctx.arc(tower.x, tower.y, 22, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = "#4a4a4a";
+                    ctx.fillRect(tower.x - 10, tower.y - 30, 20, 15);
+                } else {
+                    ctx.beginPath();
+                    ctx.arc(tower.x, tower.y, 20, 0, Math.PI * 2);
+                    ctx.fill();
+                }
                 
                 ctx.save();
                 ctx.translate(tower.x, tower.y);
@@ -444,8 +613,6 @@
                 } else if (tower.type === "crossbow") {
                     ctx.fillRect(0, -2, 30, 4);
                     ctx.fillRect(25, -8, 4, 16);
-                } else {
-                    ctx.fillRect(0, -15, 20, 30);
                 }
                 ctx.restore();
 
@@ -456,10 +623,19 @@
                 ctx.stroke();
             }
 
+            for (const knight of knights) {
+                drawKnight(knight);
+            }
+
             for (const orc of orcs) {
                 ctx.fillStyle = "#228B22";
                 ctx.beginPath();
                 ctx.arc(orc.x, orc.y, 15, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.fillStyle = "#8B4513";
+                ctx.beginPath();
+                ctx.arc(orc.x, orc.y - 10, 8, 0, Math.PI * 2);
                 ctx.fill();
                 
                 ctx.fillStyle = "#8B0000";
